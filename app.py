@@ -1,7 +1,7 @@
 
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 from pytesseract import image_to_string
 from PIL import Image
@@ -72,14 +72,15 @@ def extract_content_from_url(url: str):
     end_time = time.time()  # Record the end time
     elapsed_time = end_time - start_time  # Calculate elapsed time
 
-    print(f"Function execution time: {elapsed_time:.2f} seconds")  # Display the elapsed time
+    print(f"Extraction function execution time: {elapsed_time:.2f} seconds")  # Display the elapsed time
 
     return text_with_pytesseract
 
 #### 3. Extract structured info from text via LLM
 
 def extract_structured_data(content: str, data_points):
-    llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613") #Set the LLM model and give it instructions message
+
+    llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo") #Set the LLM model and give it instructions message
     template = """
     You are an expert admin people who will extract core information from documents
 
@@ -99,9 +100,20 @@ def extract_structured_data(content: str, data_points):
         template=template,
     )
 
-    chain = LLMChain(llm=llm, prompt=prompt)
+    # Prepare the input dictionary for the invoke method
+    input_data = {
+        "content": content,
+        "data_points": data_points
+    }
 
-    results = chain.run(content=content, data_points=data_points)
+
+    # Chain the prompt and model together using RunnableSequence
+    chain = prompt | llm | StrOutputParser()
+
+
+    # chain = LLMChain(llm=llm, prompt=prompt)
+    results = chain.invoke(input_data)
+
 
     return results
 
@@ -114,7 +126,7 @@ def main():
     "destination: "What is the destination that offers services or accomodation?"
     }"""
 
-    content = extract_content_from_url("Group_Rates.pdf")
+    content = extract_content_from_url("Group_Rates_small.pdf")
     data = extract_structured_data(content, default_data_points)
 
     print(data)
