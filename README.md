@@ -9,7 +9,14 @@ Use fitz (former pyMuPdf) for extraction.\
 Use langchain to pass text with instructions prompt to AI.
 Use OpenAI API to return curated values. 
 
+Install packages on AWS for specific version 3.9
+
+sudo python3.9 -m pip install openai
+
 ## Usage
+
+Run with version
+sudo python3.9 script.py
 
 ## Acknowledgments
 ### 

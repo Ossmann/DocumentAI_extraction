@@ -1,6 +1,6 @@
 import fitz  # former pyMuPDF
 import boto3
-from langchain_openai import ChatOpenAI
+from langchain.chat_models import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
@@ -9,6 +9,10 @@ import os
 import csv
 import json
 import logging
+from flask import Flask, request
+import requests
+import subprocess
+import sys
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -77,7 +81,7 @@ def extract_structured_data(content: str, data_points):
         and export in a JSON array format:
         {data_points}
 
-        Now please extract details from the content  and export in a JSON array format, 
+        Now please extract details from the content and export in a JSON array format, 
         return ONLY the JSON array:
         """
 
@@ -140,11 +144,66 @@ def main(bucket_name, s3_key):
     except Exception as e:
         logging.error(f"An error occurred during processing: {e}")
 
+######### 7. Flask App for Listening #################
+app = Flask(__name__)
+
+@app.route('/sns', methods=['POST'])
+def sns_listener():
+    # Handle empty or non-JSON payloads
+    if not request.data:
+        print("Received an empty POST request")
+        return '', 400  # Bad Request
+
+    try:
+        data = json.loads(request.data)
+    except json.JSONDecodeError:
+        print("Received a request with invalid JSON")
+        return '', 400  # Bad Request
+
+    # Check if it's a SubscriptionConfirmation request
+    if data.get('Type') == 'SubscriptionConfirmation' and 'SubscribeURL' in data:
+        subscribe_url = data['SubscribeURL']
+        requests.get(subscribe_url)
+        print("Subscription confirmed.")
+        return '', 200
+
+    # Otherwise, it's a notification
+    message = json.loads(data['Message'])
+    print(f"Received message: {message}")
+
+    # Extract the bucket and object key from the SNS message
+    records = message.get('Records', [])
+    if not records:
+        print("No records found in the message.")
+        return '', 400
+
+    bucket_name = records[0]['s3']['bucket']['name']
+    object_key = records[0]['s3']['object']['key']
+
+    # Define the full path to the script
+    script_path = os.path.abspath(__file__)
+
+    # Call the main function directly
+    try:
+        main(bucket_name, object_key)
+        print(f"Started processing {object_key} from bucket {bucket_name}.")
+    except Exception as e:
+        print(f"Failed to process {object_key}: {e}")
+        return '', 500
+
+    return '', 200
+
+######### 8. Entry Point #################
 if __name__ == '__main__':
-    multiprocessing.freeze_support()
-    if len(sys.argv) != 3:
-        logging.error("Usage: python app_aws.py <bucket_name> <s3_key>")
-        sys.exit(1)
-    bucket_name = sys.argv[1]
-    s3_key = sys.argv[2]
-    main(bucket_name, s3_key)
+    if len(sys.argv) > 1:
+        # If there are command-line arguments, treat it as a script execution
+        if len(sys.argv) != 3:
+            logging.error("Usage: python pdf_processor.py <bucket_name> <s3_key>")
+            sys.exit(1)
+        bucket_name = sys.argv[1]
+        s3_key = sys.argv[2]
+        multiprocessing.freeze_support()
+        main(bucket_name, s3_key)
+    else:
+        # Otherwise, start the Flask app
+        app.run(host='0.0.0.0', port=80)
