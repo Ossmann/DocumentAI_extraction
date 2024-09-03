@@ -2,11 +2,26 @@
 DocumentAI data extraction
 
 ## Overview
+We extact text and table data from pdf and use AI to get specific infos.
 
 ## Installation
+Use fitz (former pyMuPdf) for extraction.\
+Use langchain to pass text with instructions prompt to AI.
+Use OpenAI API to return curated values. 
 
 ## Usage
-Use to extract predefined infos from pdfs with the hep of pytesseract OCR and OpenAI.
+
+## Acknowledgments
+### 
+
+
+## Resources
+Check out Pythonology for fitz (pyMuPDF)
+- [Pythonology] (https://www.youtube.com/watch?v=G0PApj7YPBo)
+
+Check Out AI Jason for langchain application, but check out langchain docu for latest functions
+- [AI Jason's YouTube Tutorial](https://www.youtube.com/watch?v=v_cfORExneQ)
+
 
 ## Update
 
@@ -36,12 +51,3 @@ Instead of:
 ```python
 chain = LLMChain(llm=llm, prompt=prompt)
 ```
-
-## Acknowledgments
-### 
-Thank you to AI Jason for instructions
-
-## Resources
-Link to any resources or tutorials you found helpful.
-
-- [AI Jason's YouTube Tutorial](https://www.youtube.com/watch?v=v_cfORExneQ)

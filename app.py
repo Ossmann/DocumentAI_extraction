@@ -1,82 +1,66 @@
 
+import fitz
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
-from pytesseract import image_to_string
-from PIL import Image
-from io import BytesIO
-import pypdfium2 as pdfium
-import streamlit as st
 import multiprocessing
-from tempfile import NamedTemporaryFile
-import pandas as pd
-import json
-import requests
-import time
-
 
 # load the OpenAI API Key from environment variables
 load_dotenv()
 
 
-#### 1. Convert PDF file into images via pydpdfium2
+######### 1. Get PDF text and tables as markup #################
+def extract_text_tables_pdf(file):
+    # Create a document object
+    doc = fitz.open('Group_Rates_small.pdf')
 
-def convert_pdf_to_images(file_path, scale=300/72):
+    # Initialize an empty string to hold the entire extracted markup text from the pdf
+    pdf_markup = ""
 
-    pdf_file = pdfium.PdfDocument(file_path)
+    # Extract the number of pages (int)
+    print(doc.page_count)
+    page_count = doc.page_count
 
-    page_indices = [i for i in range(len(pdf_file))]
+    # Loop through each page by index
+    for i in range(page_count):
+        # Get the page by index
+        page = doc.load_page(i)   
 
-    renderer = pdf_file.render(
-        pdfium.PdfBitmap.to_pil,
-        page_indices=page_indices,
-        scale=scale,
-    )
+        # Convert the TableFinder object to a list
+        tabs = list(page.find_tables())  # detect the tables and convert to list
 
-    final_images = []
+        # Collect the bounding boxes of all cells in all tables
+        table_areas = []
+        for tab in tabs:
+            for cell in tab.cells:
+                table_areas.append(cell[:4])  # Each cell has a bounding box defined by (x0, y0, x1, y1)
 
-    for i, image in zip(page_indices, renderer):
+        # Extract and print each table's content
+        for i, tab in enumerate(tabs):  # iterate over all tables
+            table_data = tab.extract()
+            for row_index, row_content in enumerate(table_data):
+                print(f"Row {row_index}: {row_content}")
+        
+        # get all the text
+        all_text = page.get_text("markdown")
 
-        image_byte_array = BytesIO()
-        image.save(image_byte_array, format='jpeg', optimize=True)
-        image_byte_array = image_byte_array.getvalue()
-        final_images.append(dict({i: image_byte_array}))
+        # initialize the varible that holds the text where duplicate tables have been removed
+        non_table_text = ""
+        
+        # Remove text that falls within the bounding boxes of the table cells to avoid duplicate
+        for area in table_areas:
+            clip_rect = fitz.Rect(area)
+            non_table_text = all_text.replace(page.get_text("markdown", clip=clip_rect), "")
+        
+        # Add the non-table text to the markup
+        pdf_markup += f"Text on page {i + 1}:\n{non_table_text}\n"
 
-    return final_images
+    # Return the accumulated markup
+    return pdf_markup
+    
 
-#### 2. Extract text from images via pytesseract
-
-def extract_text_from_img(list_dict_final_images):
-
-    image_list = [list(data.values())[0] for data in list_dict_final_images]
-    image_content = []
-
-    for index, image_bytes in enumerate(image_list):
-
-        image = Image.open(BytesIO(image_bytes))
-        raw_text = str(image_to_string(image))
-        image_content.append(raw_text)
-
-    return "\n".join(image_content)
-
-# call function from step 1. and to pass the images to 
-def extract_content_from_url(url: str):
-
-    start_time = time.time()  # Record the start time
-
-
-    images_list = convert_pdf_to_images(url)
-    text_with_pytesseract = extract_text_from_img(images_list)
-
-    end_time = time.time()  # Record the end time
-    elapsed_time = end_time - start_time  # Calculate elapsed time
-
-    print(f"Extraction function execution time: {elapsed_time:.2f} seconds")  # Display the elapsed time
-
-    return text_with_pytesseract
-
-#### 3. Extract structured info from text via LLM
+######### 2. Extract structured info from text via LLM #################
 
 def extract_structured_data(content: str, data_points):
 
@@ -117,16 +101,17 @@ def extract_structured_data(content: str, data_points):
 
     return results
 
-#### 4. App with input fields
+#### 3. Run the App with input fields
 
 def main():
+    #define the putput variables we want to get
     default_data_points = """{
-    "room_type": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'. The number behind Sleeps matters.",
+    "room_type": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'. tters.",
     "High_season_rate": "How much does this room cost in high season?"
     "destination: "What is the destination that offers services or accomodation?"
     }"""
 
-    content = extract_content_from_url("Group_Rates_small.pdf")
+    content = extract_text_tables_pdf("Group_Rates_small.pdf")
     data = extract_structured_data(content, default_data_points)
 
     print(data)
