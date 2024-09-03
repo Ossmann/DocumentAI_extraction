@@ -117,11 +117,11 @@ def extract_structured_data(content: str, data_points):
 
     return results
 
-#### 4. Send data to make.com via webhook
+#### 4. App with input fields
 
 def main():
     default_data_points = """{
-    "room_type": "What is the type of room that is available",
+    "room_type": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'. The number behind Sleeps matters.",
     "High_season_rate": "How much does this room cost in high season?"
     "destination: "What is the destination that offers services or accomodation?"
     }"""

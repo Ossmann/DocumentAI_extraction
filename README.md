@@ -1,11 +1,12 @@
 # Project Name
+DocumentAI data extraction
 
 ## Overview
 
 ## Installation
 
 ## Usage
-
+Use to extract predefined infos from pdfs with the hep of pytesseract OCR and OpenAI.
 
 ## Update
 
@@ -18,6 +19,22 @@ from langchain_openai import ChatOpenAI
 Instead of:
 ```python
 from langchain.chat_models import ChatOpenAI
+```
+
+```python
+input_data = {
+        "content": content,
+        "data_points": data_points
+    }
+
+    chain = prompt | llm | StrOutputParser()
+
+    results = chain.invoke(input_data)
+```
+
+Instead of:
+```python
+chain = LLMChain(llm=llm, prompt=prompt)
 ```
 
 ## Acknowledgments
