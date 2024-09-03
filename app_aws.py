@@ -1,5 +1,4 @@
-
-import fitz
+import fitz  # former pyMuPDF
 import boto3
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
@@ -9,8 +8,12 @@ import multiprocessing
 import os
 import csv
 import json
+import logging
 
-# load the OpenAI API Key from environment variables
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load the OpenAI API Key from environment variables
 load_dotenv()
 
 # Initialize S3 client
@@ -18,161 +21,126 @@ s3_client = boto3.client('s3')
 
 ######### 1. Download PDF from S3 #################
 def download_pdf_from_s3(bucket_name, s3_key, local_file_path):
-    s3_client.download_file(bucket_name, s3_key, local_file_path)
+    try:
+        logging.info(f"Downloading {s3_key} from bucket {bucket_name} to {local_file_path}")
+        s3_client.download_file(bucket_name, s3_key, local_file_path)
+        logging.info("Download complete")
+    except Exception as e:
+        logging.error(f"Failed to download file from S3: {e}")
+        raise
 
 ######### 2. Get PDF text and tables as markup #################
 def extract_text_tables_pdf(file_path):
-    # Create a document object
+    logging.info(f"Extracting text and tables from PDF: {file_path}")
     doc = fitz.open(file_path)
-
-    # Initialize an empty string to hold the entire extracted markup text from the pdf
     pdf_markup = ""
-
-    # Extract the number of pages (int)
-    print(doc.page_count)
     page_count = doc.page_count
+    logging.info(f"Number of pages in PDF: {page_count}")
 
-    # Loop through each page by index
     for i in range(page_count):
-        # Get the page by index
-        page = doc.load_page(i)   
+        page = doc.load_page(i)
+        tabs = list(page.find_tables())
+        logging.info(f"Found {len(tabs)} tables on page {i + 1}")
 
-        # Convert the TableFinder object to a list
-        tabs = list(page.find_tables())  # detect the tables and convert to list
-
-        # Collect the bounding boxes of all cells in all tables
         table_areas = []
         for tab in tabs:
             for cell in tab.cells:
-                table_areas.append(cell[:4])  # Each cell has a bounding box defined by (x0, y0, x1, y1)
+                table_areas.append(cell[:4])
 
-        # Extract and print each table's content
-        for i, tab in enumerate(tabs):  # iterate over all tables
+        for i, tab in enumerate(tabs):
             table_data = tab.extract()
             for row_index, row_content in enumerate(table_data):
-                print(f"Row {row_index}: {row_content}")
-        
-        # get all the text
-        all_text = page.get_text("markdown")
+                logging.info(f"Table {i + 1} - Row {row_index}: {row_content}")
 
-        # initialize the varible that holds the text where duplicate tables have been removed
-        non_table_text = ""
-        
-        # Remove text that falls within the bounding boxes of the table cells to avoid duplicate
+        all_text = page.get_text("markdown")
+        non_table_text = all_text
         for area in table_areas:
             clip_rect = fitz.Rect(area)
             non_table_text = all_text.replace(page.get_text("markdown", clip=clip_rect), "")
-        
-        # Add the non-table text to the markup
+
         pdf_markup += f"Text on page {i + 1}:\n{non_table_text}\n"
 
-    # Return the accumulated markup
+    logging.info("Text and table extraction complete")
     return pdf_markup
-    
 
 ######### 3. Extract structured info from text via LLM #################
-
 def extract_structured_data(content: str, data_points):
+    logging.info("Extracting structured data using LLM")
+    try:
+        llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo")
+        template = """
+        You are an expert admin people who will extract core information from documents
 
-    llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo") #Set the LLM model and give it instructions message
-    template = """
-    You are an expert admin people who will extract core information from documents
+        {content}
 
-    {content}
+        Above is the content; please try to extract all data points from the content above 
+        and export in a JSON array format:
+        {data_points}
 
-    Above is the content; please try to extract all data points from the content above 
-    and export in a JSON array format:
-    {data_points}
+        Now please extract details from the content  and export in a JSON array format, 
+        return ONLY the JSON array:
+        """
 
-    Now please extract details from the content  and export in a JSON array format, 
-    return ONLY the JSON array:
-    """
-
-    #create the prompt template to pass on content and data points to the LLM
-    prompt = PromptTemplate(
-        input_variables=["content", "data_points"],
-        template=template,
-    )
-
-    # Prepare the input dictionary for the invoke method
-    input_data = {
-        "content": content,
-        "data_points": data_points
-    }
-
-
-    # Chain the prompt and model together using RunnableSequence
-    chain = prompt | llm | StrOutputParser()
-
-
-    # chain = LLMChain(llm=llm, prompt=prompt)
-    results = chain.invoke(input_data)
-
-
-    return results
-
+        prompt = PromptTemplate(input_variables=["content", "data_points"], template=template)
+        input_data = {"content": content, "data_points": data_points}
+        chain = prompt | llm | StrOutputParser()
+        results = chain.invoke(input_data)
+        logging.info("Structured data extraction complete")
+        return results
+    except Exception as e:
+        logging.error(f"Failed to extract structured data: {e}")
+        raise
 
 ######### 4. Save the extracted data to CSV #################
 def save_to_csv(data, csv_file_path):
-
-    # Parse the string response to JSON
+    logging.info(f"Saving extracted data to CSV: {csv_file_path}")
     try:
         data = json.loads(data)
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
-        return
+        headers = data[0].keys()
 
-    # Extract the headers from the first dictionary (keys of the dictionary)
-    headers = data[0].keys()
+        with open(csv_file_path, mode='w', newline='', encoding='utf-8') as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=headers)
+            writer.writeheader()
+            for row in data:
+                writer.writerow(row)
 
-    # Open the CSV file for writing
-    with open(csv_file_path, mode='w', newline='', encoding='utf-8') as csv_file:
-        # Create a CSV DictWriter object
-        writer = csv.DictWriter(csv_file, fieldnames=headers)
-
-        # Write the header row
-        writer.writeheader()
-
-        # Write the data rows
-        for row in data:
-            writer.writerow(row)
-
-    print(f"Data has been successfully saved to {csv_file_path}")
+        logging.info(f"Data successfully saved to {csv_file_path}")
+    except Exception as e:
+        logging.error(f"Failed to save data to CSV: {e}")
+        raise
 
 ######### 5. Upload CSV to S3 #################
 def upload_csv_to_s3(bucket_name, s3_key, local_file_path):
-    s3_client.upload_file(local_file_path, bucket_name, s3_key)
+    try:
+        logging.info(f"Uploading {local_file_path} to bucket {bucket_name} with key {s3_key}")
+        s3_client.upload_file(local_file_path, bucket_name, s3_key)
+        logging.info("Upload complete")
+    except Exception as e:
+        logging.error(f"Failed to upload CSV to S3: {e}")
+        raise
 
 ######### 6. Run the App with input fields #################
 def main():
-    # Define the S3 bucket and file key
+    logging.info("Starting the PDF processing script")
     bucket_name = 'my-pdf-processing-ai-bucket'
-    s3_key = 'Group_Rates_small.pdf'  # Assuming the file is at the root of the bucket
+    s3_key = 'Group_Rates_small.pdf'
     local_pdf_path = '/tmp/Group_Rates_small.pdf'
     local_csv_path = '/tmp/extracted_data.csv'
-    s3_csv_key = 'processed-data/extracted_data.csv'  # Uploading to a specific folder
+    s3_csv_key = 'processed-data/extracted_data.csv'
 
-    # Download the PDF from S3
-    download_pdf_from_s3(bucket_name, s3_key, local_pdf_path)
-
-    # Define the output variables we want to get
-    default_data_points = """{
-    "room_config": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'.",
-    "High_season_rate": "How much does this room cost in high season?",
-    "destination": "What is the destination that offers services or accommodation?"
-    }"""
-
-    # Extract content from PDF
-    content = extract_text_tables_pdf(local_pdf_path)
-
-    # Extract structured data
-    data = extract_structured_data(content, default_data_points)
-
-    # Save the extracted data to a CSV file
-    save_to_csv(data, local_csv_path)
-
-    # Upload the CSV file back to S3
-    upload_csv_to_s3(bucket_name, s3_csv_key, local_csv_path)
+    try:
+        download_pdf_from_s3(bucket_name, s3_key, local_pdf_path)
+        default_data_points = """{
+            "room_config": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'.",
+            "High_season_rate": "How much does this room cost in high season?",
+            "destination": "What is the destination that offers services or accommodation?"
+        }"""
+        content = extract_text_tables_pdf(local_pdf_path)
+        data = extract_structured_data(content, default_data_points)
+        save_to_csv(data, local_csv_path)
+        upload_csv_to_s3(bucket_name, s3_csv_key, local_csv_path)
+    except Exception as e:
+        logging.error(f"An error occurred during processing: {e}")
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
