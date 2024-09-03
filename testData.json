@@ -1,0 +1,27 @@
+[
+    {
+        "room_type": "Superior 1 Bedroom Cabin Sleeps 4",
+        "High_season_rate": "$173.25",
+        "destination": "Airlie Beach"
+    },
+    {
+        "room_type": "Superior 2 Bedroom Cabin Sleeps 6",
+        "High_season_rate": "$192.00",
+        "destination": "Airlie Beach"
+    },
+    {
+        "room_type": "Superior 2 Bedroom Cabin Sleeps 4",
+        "High_season_rate": "$192.00",
+        "destination": "Airlie Beach"
+    },
+    {
+        "room_type": "Deluxe Bali Villa",
+        "High_season_rate": "$216.75",
+        "destination": "Airlie Beach"
+    },
+    {
+        "room_type": "Deluxe 2 Bedroom Cabin",
+        "High_season_rate": "$216.75",
+        "destination": "Airlie Beach"
+    }
+]

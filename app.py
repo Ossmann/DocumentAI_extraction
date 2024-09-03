@@ -106,7 +106,7 @@ def extract_structured_data(content: str, data_points):
 def main():
     #define the putput variables we want to get
     default_data_points = """{
-    "room_type": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'. tters.",
+    "room_config": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'. tters.",
     "High_season_rate": "How much does this room cost in high season?"
     "destination: "What is the destination that offers services or accomodation?"
     }"""
