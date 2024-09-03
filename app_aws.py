@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import multiprocessing
 import os
 import csv
+import json
 
 # load the OpenAI API Key from environment variables
 load_dotenv()
@@ -113,12 +114,30 @@ def extract_structured_data(content: str, data_points):
 
 ######### 4. Save the extracted data to CSV #################
 def save_to_csv(data, csv_file_path):
-    # Assuming data is a list of dictionaries
-    keys = data[0].keys()
-    with open(csv_file_path, 'w', newline='') as output_file:
-        dict_writer = csv.DictWriter(output_file, fieldnames=keys)
-        dict_writer.writeheader()
-        dict_writer.writerows(data)
+
+    # Parse the string response to JSON
+    try:
+        data = json.loads(data)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON: {e}")
+        return
+
+    # Extract the headers from the first dictionary (keys of the dictionary)
+    headers = data[0].keys()
+
+    # Open the CSV file for writing
+    with open(csv_file_path, mode='w', newline='', encoding='utf-8') as csv_file:
+        # Create a CSV DictWriter object
+        writer = csv.DictWriter(csv_file, fieldnames=headers)
+
+        # Write the header row
+        writer.writeheader()
+
+        # Write the data rows
+        for row in data:
+            writer.writerow(row)
+
+    print(f"Data has been successfully saved to {csv_file_path}")
 
 ######### 5. Upload CSV to S3 #################
 def upload_csv_to_s3(bucket_name, s3_key, local_file_path):
