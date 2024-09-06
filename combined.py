@@ -73,7 +73,7 @@ def extract_structured_data(content: str, data_points):
     try:
         llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo")
         template = """
-        You are an expert admin people who will extract core information from documents
+        You are an expert admin worker who will extract core information from documents
 
         {content}
 
@@ -133,9 +133,11 @@ def main(bucket_name, s3_key):
     try:
         download_pdf_from_s3(bucket_name, s3_key, local_pdf_path)
         default_data_points = """{
-            "room_config": "What is the type of room that is available, for example 'Superior 2 Bedroom Cabin Sleeps 4'.",
-            "High_season_rate": "How much does this room cost in high season?",
-            "destination": "What is the destination that offers services or accommodation?"
+            "Total stockholders’ equity 2024 2023": "The total value that the stockholders own. Assets minus liabilities. For example 2,000,000 1,800,000?",
+            "Revenue Change Rate year over year": "What percent did the revenue change year over year?",
+            "Daily Active Users": "How many daily active users does the company's application have? For example 400 million",
+            "Biggest risk to the company": "What is the biggest risk or uncertainty to the company's earnings going forward?",
+            "Biggest opportunity": "What is the biggest opportunity for the business to increase revenue or market share in the coming years?"
         }"""
         content = extract_text_tables_pdf(local_pdf_path)
         data = extract_structured_data(content, default_data_points)
